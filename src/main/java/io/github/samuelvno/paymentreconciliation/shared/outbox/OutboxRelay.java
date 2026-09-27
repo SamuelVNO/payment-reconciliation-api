@@ -8,6 +8,9 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,13 +35,17 @@ public class OutboxRelay {
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final OutboxProperties properties;
     private final Clock clock;
+    private final Counter publishedCounter;
+    private final Counter failedCounter;
 
     public OutboxRelay(OutboxRepository repository, KafkaTemplate<String, String> kafkaTemplate,
-                       OutboxProperties properties, Clock clock) {
+                       OutboxProperties properties, Clock clock, MeterRegistry meterRegistry) {
         this.repository = repository;
         this.kafkaTemplate = kafkaTemplate;
         this.properties = properties;
         this.clock = clock;
+        this.publishedCounter = Counter.builder("outbox.published").register(meterRegistry);
+        this.failedCounter = Counter.builder("outbox.publish.failures").register(meterRegistry);
     }
 
     @Transactional
@@ -54,6 +61,7 @@ public class OutboxRelay {
                 // Espera o ack do broker: só marca como publicado o que o Kafka confirmou.
                 kafkaTemplate.send(record).get(10, TimeUnit.SECONDS);
                 event.markPublished(Instant.now(clock));
+                publishedCounter.increment();
                 published++;
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
@@ -62,6 +70,7 @@ public class OutboxRelay {
             } catch (ExecutionException | TimeoutException ex) {
                 // Broker fora do ar: para o lote e tenta de novo no próximo ciclo (ordem preservada).
                 event.markFailed(ex.getMessage());
+                failedCounter.increment();
                 log.warn("Could not publish outbox event {} (attempt {}): {}", event.getId(), event.getAttempts(),
                         ex.getMessage());
                 break;

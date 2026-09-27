@@ -6,6 +6,9 @@ import java.util.UUID;
 
 import jakarta.validation.Valid;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -22,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@Tag(name = "Conciliação", description = "Motor de conciliação, divergências e relatório.")
 @RequestMapping("/api/stores/{storeId}")
 public class ReconciliationController {
 
@@ -31,6 +35,7 @@ public class ReconciliationController {
         this.reconciliationService = reconciliationService;
     }
 
+    @Operation(summary = "Executa a conciliação da loja agora")
     @PostMapping("/reconciliation-runs")
     public ResponseEntity<ReconciliationRunResponse> run(@PathVariable UUID storeId) {
         ReconciliationRunResponse run = reconciliationService.reconcile(storeId, TriggerSource.MANUAL);
@@ -38,6 +43,7 @@ public class ReconciliationController {
                 .body(run);
     }
 
+    @Operation(summary = "Histórico de execuções")
     @GetMapping("/reconciliation-runs")
     public Page<ReconciliationRunResponse> runs(@PathVariable UUID storeId,
                                                 @PageableDefault(size = 20, sort = "createdAt",
@@ -45,6 +51,7 @@ public class ReconciliationController {
         return reconciliationService.findRuns(storeId, pageable);
     }
 
+    @Operation(summary = "Lista divergências com filtros por tipo e status")
     @GetMapping("/discrepancies")
     public Page<DiscrepancyView> discrepancies(@PathVariable UUID storeId,
                                                @RequestParam(required = false) DiscrepancyType type,
@@ -54,6 +61,7 @@ public class ReconciliationController {
         return reconciliationService.findDiscrepancies(storeId, type, status, pageable);
     }
 
+    @Operation(summary = "Marca uma divergência como resolvida")
     @PatchMapping("/discrepancies/{discrepancyId}/resolve")
     public ResponseEntity<Void> resolve(@PathVariable UUID storeId, @PathVariable UUID discrepancyId,
                                         @Valid @RequestBody ResolveDiscrepancyRequest request) {
@@ -61,6 +69,7 @@ public class ReconciliationController {
         return ResponseEntity.noContent().build();
     }
 
+    @Operation(summary = "Relatório agregado do período")
     @GetMapping("/reconciliation-report")
     public ReconciliationReport report(@PathVariable UUID storeId,
                                        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

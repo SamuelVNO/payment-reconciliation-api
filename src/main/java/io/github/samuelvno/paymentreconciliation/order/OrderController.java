@@ -5,6 +5,9 @@ import java.util.UUID;
 
 import jakarta.validation.Valid;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@Tag(name = "Pedidos", description = "Pedidos que a loja espera receber.")
 @RequestMapping("/api/stores/{storeId}/orders")
 public class OrderController {
 
@@ -28,6 +32,7 @@ public class OrderController {
         this.orderService = orderService;
     }
 
+    @Operation(summary = "Cadastra um pedido")
     @PostMapping
     public ResponseEntity<OrderResponse> create(@PathVariable UUID storeId,
                                                 @Valid @RequestBody CreateOrderRequest request) {
@@ -36,11 +41,13 @@ public class OrderController {
                 .body(order);
     }
 
+    @Operation(summary = "Busca um pedido")
     @GetMapping("/{orderId}")
     public OrderResponse findById(@PathVariable UUID storeId, @PathVariable UUID orderId) {
         return orderService.findById(storeId, orderId);
     }
 
+    @Operation(summary = "Lista pedidos, com filtro opcional por status de conciliação")
     @GetMapping
     public Page<OrderResponse> findAll(@PathVariable UUID storeId,
                                        @RequestParam(required = false) ReconciliationStatus status,

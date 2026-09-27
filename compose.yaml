@@ -40,5 +40,29 @@ services:
       timeout: 10s
       retries: 10
 
+  # A API em container. Para desenvolver, suba só "postgres kafka" e rode ./mvnw spring-boot:run
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/reconciliation
+      DB_USERNAME: app
+      DB_PASSWORD: app
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      JWT_SECRET: ${JWT_SECRET:-compose-local-secret-change-me-0123456789abcdef}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@local.dev}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
+      PAYOUT_INBOX_DIR: /app/payout-inbox
+      # Logs em JSON (formato ECS): prontos para Elasticsearch, Loki, Datadog...
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    volumes:
+      - ./payout-inbox:/app/payout-inbox
+
 volumes:
   pgdata:

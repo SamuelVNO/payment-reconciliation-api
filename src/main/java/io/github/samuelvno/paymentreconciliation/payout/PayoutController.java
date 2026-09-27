@@ -7,6 +7,9 @@ import java.util.UUID;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -25,6 +28,7 @@ import org.springframework.web.multipart.MultipartFile;
 import io.github.samuelvno.paymentreconciliation.shared.error.InvalidRequestException;
 
 @RestController
+@Tag(name = "Repasses", description = "Importação dos repasses do adquirente (CSV).")
 @RequestMapping("/api/stores/{storeId}")
 public class PayoutController {
 
@@ -34,6 +38,7 @@ public class PayoutController {
         this.importService = importService;
     }
 
+    @Operation(summary = "Importa CSV de repasses (idempotente via header Idempotency-Key)")
     @PostMapping(path = "/payout-imports", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<PayoutImportResponse> importCsv(
             @PathVariable UUID storeId,
@@ -53,11 +58,13 @@ public class PayoutController {
         return ResponseEntity.created(location).body(outcome.result());
     }
 
+    @Operation(summary = "Resultado de uma importação")
     @GetMapping("/payout-imports/{importId}")
     public PayoutImportResponse findImport(@PathVariable UUID storeId, @PathVariable UUID importId) {
         return importService.findImport(storeId, importId);
     }
 
+    @Operation(summary = "Lista repasses importados")
     @GetMapping("/payouts")
     public Page<PayoutResponse> findPayouts(@PathVariable UUID storeId,
                                             @PageableDefault(size = 20, sort = "paidAt", direction = Sort.Direction.DESC)

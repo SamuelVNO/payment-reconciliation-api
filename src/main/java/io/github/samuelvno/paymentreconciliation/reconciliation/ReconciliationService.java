@@ -10,6 +10,10 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -53,12 +57,15 @@ public class ReconciliationService {
     private final Clock clock;
     private final OutboxWriter outbox;
     private final String discrepanciesTopic;
+    private final MeterRegistry meterRegistry;
+    private final Timer runTimer;
 
     public ReconciliationService(StoreService storeService, OrderRepository orderRepository,
                                  PayoutRepository payoutRepository, DiscrepancyRepository discrepancyRepository,
                                  ReconciliationRunRepository runRepository, ReconciliationProperties properties,
                                  PlatformTransactionManager transactionManager, Clock clock, OutboxWriter outbox,
-                                 @Value("${app.kafka.topics.discrepancies}") String discrepanciesTopic) {
+                                 @Value("${app.kafka.topics.discrepancies}") String discrepanciesTopic,
+                                 MeterRegistry meterRegistry) {
         this.storeService = storeService;
         this.orderRepository = orderRepository;
         this.payoutRepository = payoutRepository;
@@ -70,6 +77,11 @@ public class ReconciliationService {
         this.clock = clock;
         this.outbox = outbox;
         this.discrepanciesTopic = discrepanciesTopic;
+        this.meterRegistry = meterRegistry;
+        this.runTimer = Timer.builder("reconciliation.run.duration")
+                .description("Time to reconcile all pending orders of one store")
+                .publishPercentileHistogram()
+                .register(meterRegistry);
     }
 
     /**
@@ -79,6 +91,10 @@ public class ReconciliationService {
      * os lotes já concluídos ficam salvos e o próximo run continua de onde parou.
      */
     public ReconciliationRunResponse reconcile(UUID storeId, TriggerSource trigger) {
+        return runTimer.record(() -> doReconcile(storeId, trigger));
+    }
+
+    private ReconciliationRunResponse doReconcile(UUID storeId, TriggerSource trigger) {
         Store store = storeService.getStore(storeId);
         LocalDate today = LocalDate.now(clock);
         ReconciliationRun run = tx.execute(status -> runRepository.save(new ReconciliationRun(store, trigger, today)));
@@ -88,6 +104,8 @@ public class ReconciliationService {
         while (true) {
             UUID after = cursor;
             BatchResult batch = tx.execute(status -> processBatch(store, run, after, today));
+            // Métrica só depois do commit: se o lote desse rollback, não contaria divergência fantasma
+            batch.discrepancyTypes().forEach(this::countDiscrepancy);
             totals = totals.plus(batch.totals());
             if (batch.lastOrderId() == null || batch.totals().ordersChecked() < properties.batchSize()) {
                 break;
@@ -96,6 +114,9 @@ public class ReconciliationService {
         }
 
         int orphans = tx.execute(status -> flagOrphanPayouts(store, run));
+        for (int i = 0; i < orphans; i++) {
+            countDiscrepancy(DiscrepancyType.ORPHAN_PAYOUT);
+        }
         RunTotals finalTotals = totals.plus(new RunTotals(0, 0, 0, 0, orphans));
 
         ReconciliationRunResponse response = tx.execute(status -> {
@@ -109,13 +130,21 @@ public class ReconciliationService {
         return response;
     }
 
-    private record BatchResult(RunTotals totals, UUID lastOrderId) {
+    private record BatchResult(RunTotals totals, UUID lastOrderId, List<DiscrepancyType> discrepancyTypes) {
+    }
+
+    private void countDiscrepancy(DiscrepancyType type) {
+        // Counter com tag: no Prometheus vira reconciliation_discrepancies_total{type="FEE_OVERCHARGED"}
+        Counter.builder("reconciliation.discrepancies")
+                .tag("type", type.name())
+                .register(meterRegistry)
+                .increment();
     }
 
     private BatchResult processBatch(Store store, ReconciliationRun run, UUID afterId, LocalDate today) {
         List<Order> orders = orderRepository.findPendingBatch(store.getId(), afterId, Limit.of(properties.batchSize()));
         if (orders.isEmpty()) {
-            return new BatchResult(RunTotals.EMPTY, null);
+            return new BatchResult(RunTotals.EMPTY, null, List.of());
         }
 
         // 1 SELECT para os repasses do lote inteiro. Buscar por pedido dentro do for seria N+1.
@@ -151,7 +180,8 @@ public class ReconciliationService {
                     Instant.now(clock));
         }
         RunTotals totals = new RunTotals(orders.size(), reconciled, divergent, pending, discrepancies.size());
-        return new BatchResult(totals, orders.getLast().getId());
+        return new BatchResult(totals, orders.getLast().getId(),
+                discrepancies.stream().map(Discrepancy::getType).toList());
     }
 
     private int flagOrphanPayouts(Store store, ReconciliationRun run) {
