@@ -26,7 +26,7 @@ public class OpenApiConfig {
                                 Concilia pedidos das lojas com os repasses do adquirente e aponta divergências: \
                                 repasse faltando, valor errado, taxa acima da contratada, pagamento em dobro \
                                 e repasse sem pedido. Faça login em POST /api/auth/login e use o token no Authorize.""")
-                        .contact(new Contact().name("Samuel Vitor").url("https://github.com/SamuelVNO")))
+                        .contact(new Contact().name("SamuelVNO").url("https://github.com/SamuelVNO")))
                 .components(new Components().addSecuritySchemes(BEARER, new SecurityScheme()
                         .type(SecurityScheme.Type.HTTP)
                         .scheme("bearer")
