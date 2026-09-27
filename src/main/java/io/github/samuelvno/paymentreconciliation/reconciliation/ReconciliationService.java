@@ -12,6 +12,7 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -29,6 +30,7 @@ import io.github.samuelvno.paymentreconciliation.payout.PayoutRepository;
 import io.github.samuelvno.paymentreconciliation.shared.config.TimeConfig;
 import io.github.samuelvno.paymentreconciliation.shared.error.InvalidRequestException;
 import io.github.samuelvno.paymentreconciliation.shared.error.ResourceNotFoundException;
+import io.github.samuelvno.paymentreconciliation.shared.outbox.OutboxWriter;
 import io.github.samuelvno.paymentreconciliation.store.Store;
 import io.github.samuelvno.paymentreconciliation.store.StoreService;
 
@@ -49,11 +51,14 @@ public class ReconciliationService {
     private final ReconciliationRules rules;
     private final TransactionTemplate tx;
     private final Clock clock;
+    private final OutboxWriter outbox;
+    private final String discrepanciesTopic;
 
     public ReconciliationService(StoreService storeService, OrderRepository orderRepository,
                                  PayoutRepository payoutRepository, DiscrepancyRepository discrepancyRepository,
                                  ReconciliationRunRepository runRepository, ReconciliationProperties properties,
-                                 PlatformTransactionManager transactionManager, Clock clock) {
+                                 PlatformTransactionManager transactionManager, Clock clock, OutboxWriter outbox,
+                                 @Value("${app.kafka.topics.discrepancies}") String discrepanciesTopic) {
         this.storeService = storeService;
         this.orderRepository = orderRepository;
         this.payoutRepository = payoutRepository;
@@ -63,6 +68,8 @@ public class ReconciliationService {
         this.rules = new ReconciliationRules(properties.settlementDays(), properties.feeTolerance());
         this.tx = new TransactionTemplate(transactionManager);
         this.clock = clock;
+        this.outbox = outbox;
+        this.discrepanciesTopic = discrepanciesTopic;
     }
 
     /**
@@ -136,6 +143,7 @@ public class ReconciliationService {
             payouts.forEach(payout -> matchedPayoutIds.add(payout.getId()));
         }
         discrepancyRepository.saveAll(discrepancies);
+        enqueueEvents(store, discrepancies);
 
         // Repasse que chegou antes do pedido ser cadastrado: era órfão, agora casou.
         if (!matchedPayoutIds.isEmpty()) {
@@ -148,8 +156,19 @@ public class ReconciliationService {
 
     private int flagOrphanPayouts(Store store, ReconciliationRun run) {
         List<Payout> orphans = discrepancyRepository.findUnflaggedOrphanPayouts(store.getId());
-        discrepancyRepository.saveAll(orphans.stream().map(payout -> Discrepancy.orphan(store, run, payout)).toList());
+        List<Discrepancy> discrepancies = discrepancyRepository.saveAll(
+                orphans.stream().map(payout -> Discrepancy.orphan(store, run, payout)).toList());
+        enqueueEvents(store, discrepancies);
         return orphans.size();
+    }
+
+    // Mesma transação do lote: ou grava a divergência E o evento, ou nenhum dos dois.
+    private void enqueueEvents(Store store, List<Discrepancy> discrepancies) {
+        for (Discrepancy discrepancy : discrepancies) {
+            outbox.enqueue("Discrepancy", discrepancy.getId(), DiscrepancyDetectedEvent.EVENT_TYPE,
+                    discrepanciesTopic, store.getId().toString(),
+                    DiscrepancyDetectedEvent.from(store.getId(), discrepancy));
+        }
     }
 
     @Transactional(readOnly = true)
