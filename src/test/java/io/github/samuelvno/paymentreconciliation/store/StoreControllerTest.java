@@ -63,7 +63,8 @@ class StoreControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(header().string("Content-Type", MediaType.APPLICATION_PROBLEM_JSON_VALUE))
                 .andExpect(jsonPath("$.title").value("Invalid request"))
-                .andExpect(jsonPath("$.errors", hasSize(3)));
+                .andExpect(jsonPath("$.errors", hasSize(3)))
+                .andExpect(jsonPath("$.errors[?(@.field == 'name')].message").value("must not be blank"));
     }
 
     @Test
