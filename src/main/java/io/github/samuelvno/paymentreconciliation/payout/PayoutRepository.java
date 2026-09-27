@@ -1,6 +1,7 @@
 package io.github.samuelvno.paymentreconciliation.payout;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -18,4 +19,7 @@ public interface PayoutRepository extends JpaRepository<Payout, UUID> {
                                         @Param("externalIds") Collection<String> externalIds);
 
     Page<Payout> findByStoreId(UUID storeId, Pageable pageable);
+
+    // Repasses de um lote inteiro de pedidos em um único SELECT ... IN (...)
+    List<Payout> findByStoreIdAndOrderExternalIdIn(UUID storeId, Collection<String> orderExternalIds);
 }

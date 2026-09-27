@@ -48,7 +48,7 @@ public class Payout extends BaseEntity {
         // exigido pelo JPA
     }
 
-    Payout(Store store, PayoutImport payoutImport, PayoutCsvParser.PayoutRow row) {
+    public Payout(Store store, PayoutImport payoutImport, PayoutCsvParser.PayoutRow row) {
         this.store = store;
         this.payoutImport = payoutImport;
         this.externalId = row.externalId();
