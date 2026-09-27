@@ -31,6 +31,7 @@ import io.github.samuelvno.paymentreconciliation.payout.PayoutImportService;
 import io.github.samuelvno.paymentreconciliation.store.Store;
 import io.github.samuelvno.paymentreconciliation.store.StoreRepository;
 
+import static io.github.samuelvno.paymentreconciliation.TestAuth.storeUser;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -85,7 +86,7 @@ class ReconciliationIT {
 
     @Test
     void detectsEveryDiscrepancyTypeAndIsIdempotent() throws Exception {
-        mockMvc.perform(post("/api/stores/{storeId}/reconciliation-runs", storeId))
+        mockMvc.perform(post("/api/stores/{storeId}/reconciliation-runs", storeId).with(storeUser(storeId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.ordersChecked").value(6))
                 .andExpect(jsonPath("$.reconciled").value(1))
@@ -93,14 +94,14 @@ class ReconciliationIT {
                 .andExpect(jsonPath("$.stillPending").value(1))
                 .andExpect(jsonPath("$.discrepanciesFound").value(5));
 
-        mockMvc.perform(get("/api/stores/{storeId}/discrepancies", storeId))
+        mockMvc.perform(get("/api/stores/{storeId}/discrepancies", storeId).with(storeUser(storeId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page.totalElements").value(5))
                 .andExpect(jsonPath("$.content[*].type", containsInAnyOrder(
                         "FEE_OVERCHARGED", "AMOUNT_MISMATCH", "MISSING_PAYOUT", "DUPLICATE_PAYOUT", "ORPHAN_PAYOUT")));
 
         // Segunda execução: nada novo para conciliar, nenhuma divergência duplicada.
-        mockMvc.perform(post("/api/stores/{storeId}/reconciliation-runs", storeId))
+        mockMvc.perform(post("/api/stores/{storeId}/reconciliation-runs", storeId).with(storeUser(storeId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.ordersChecked").value(1))
                 .andExpect(jsonPath("$.discrepanciesFound").value(0));
@@ -108,25 +109,25 @@ class ReconciliationIT {
 
     @Test
     void filtersResolvesAndReports() throws Exception {
-        mockMvc.perform(post("/api/stores/{storeId}/reconciliation-runs", storeId)).andExpect(status().isCreated());
+        mockMvc.perform(post("/api/stores/{storeId}/reconciliation-runs", storeId).with(storeUser(storeId))).andExpect(status().isCreated());
 
-        String body = mockMvc.perform(get("/api/stores/{storeId}/discrepancies", storeId).param("type", "FEE_OVERCHARGED"))
+        String body = mockMvc.perform(get("/api/stores/{storeId}/discrepancies", storeId).with(storeUser(storeId)).param("type", "FEE_OVERCHARGED"))
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].orderExternalId").value("PED-1002"))
                 .andExpect(jsonPath("$.content[0].difference").value(0.81))
                 .andReturn().getResponse().getContentAsString();
         String id = JsonPath.read(body, "$.content[0].id");
 
-        mockMvc.perform(patch("/api/stores/{storeId}/discrepancies/{id}/resolve", storeId, id)
+        mockMvc.perform(patch("/api/stores/{storeId}/discrepancies/{id}/resolve", storeId, id).with(storeUser(storeId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"note\": \"Adquirente estornou a diferença\"}"))
                 .andExpect(status().isNoContent());
-        mockMvc.perform(patch("/api/stores/{storeId}/discrepancies/{id}/resolve", storeId, id)
+        mockMvc.perform(patch("/api/stores/{storeId}/discrepancies/{id}/resolve", storeId, id).with(storeUser(storeId))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"note\": \"de novo\"}"))
                 .andExpect(status().isConflict());
 
-        mockMvc.perform(get("/api/stores/{storeId}/reconciliation-report", storeId)
+        mockMvc.perform(get("/api/stores/{storeId}/reconciliation-report", storeId).with(storeUser(storeId))
                         .param("from", "2026-09-01").param("to", "2026-09-30"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ordersByStatus.RECONCILED").value(1))
@@ -138,13 +139,13 @@ class ReconciliationIT {
 
     @Test
     void orphanPayoutIsResolvedWhenOrderIsRegisteredLater() throws Exception {
-        mockMvc.perform(post("/api/stores/{storeId}/reconciliation-runs", storeId)).andExpect(status().isCreated());
+        mockMvc.perform(post("/api/stores/{storeId}/reconciliation-runs", storeId).with(storeUser(storeId))).andExpect(status().isCreated());
         order(storeRepository.findById(storeId).orElseThrow(), "PED-9999", "50.00", "2026-09-23");
 
-        mockMvc.perform(post("/api/stores/{storeId}/reconciliation-runs", storeId))
+        mockMvc.perform(post("/api/stores/{storeId}/reconciliation-runs", storeId).with(storeUser(storeId)))
                 .andExpect(jsonPath("$.reconciled").value(1));
 
-        mockMvc.perform(get("/api/stores/{storeId}/discrepancies", storeId)
+        mockMvc.perform(get("/api/stores/{storeId}/discrepancies", storeId).with(storeUser(storeId))
                         .param("type", "ORPHAN_PAYOUT").param("status", "RESOLVED"))
                 .andExpect(jsonPath("$.content.length()").value(1));
     }

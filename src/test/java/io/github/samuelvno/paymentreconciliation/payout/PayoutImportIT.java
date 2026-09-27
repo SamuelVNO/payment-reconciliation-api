@@ -16,6 +16,7 @@ import io.github.samuelvno.paymentreconciliation.TestcontainersConfiguration;
 import io.github.samuelvno.paymentreconciliation.store.Store;
 import io.github.samuelvno.paymentreconciliation.store.StoreRepository;
 
+import static io.github.samuelvno.paymentreconciliation.TestAuth.admin;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -50,13 +51,13 @@ class PayoutImportIT {
                 CSV.getBytes(StandardCharsets.UTF_8));
 
         mockMvc.perform(multipart("/api/stores/{storeId}/payout-imports", store.getId())
-                        .file(file).header("Idempotency-Key", "key-1"))
+                        .file(file).header("Idempotency-Key", "key-1").with(admin()))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.importedRows").value(2))
                 .andExpect(jsonPath("$.duplicateRows").value(1));
 
         mockMvc.perform(multipart("/api/stores/{storeId}/payout-imports", store.getId())
-                        .file(file).header("Idempotency-Key", "key-1"))
+                        .file(file).header("Idempotency-Key", "key-1").with(admin()))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Idempotent-Replayed", "true"))
                 .andExpect(jsonPath("$.importedRows").value(2));
