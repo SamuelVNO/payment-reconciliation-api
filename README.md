@@ -18,6 +18,8 @@ API de **conciliação de pagamentos**. As lojas cadastram os pedidos que espera
 
 O domínio foi escolhido porque obriga a lidar com dinheiro com precisão, idempotência, jobs agendados, mensageria e consultas pesadas no banco.
 
+![Visão geral do painel](docs/screenshots/visao-geral.png)
+
 ## Arquitetura
 
 ```mermaid
@@ -37,7 +39,9 @@ Monólito modular organizado **por feature** (`store`, `order`, `payout`, `recon
 
 ## Stack
 
-Java 21 · Spring Boot 3.5 · Maven · PostgreSQL 17 · Spring Data JPA / Hibernate 6 · Flyway · Bean Validation · Spring Security 6 + JWT (resource server, HS256) · Kafka (spring-kafka, KRaft) · ShedLock · JUnit 5 · Mockito · Testcontainers · Actuator + Micrometer/Prometheus · logs estruturados ECS · springdoc-openapi · Docker / Compose · GitHub Actions
+**API:** Java 21 · Spring Boot 3.5 · Maven · PostgreSQL 17 · Spring Data JPA / Hibernate 6 · Flyway · Bean Validation · Spring Security 6 + JWT (resource server, HS256) · Kafka (spring-kafka, KRaft) · ShedLock · JUnit 5 · Mockito · Testcontainers · Actuator + Micrometer/Prometheus · logs estruturados ECS · springdoc-openapi · Docker / Compose · GitHub Actions
+
+**Painel:** React 19 · TypeScript · Vite · shadcn/ui (Radix) · Tailwind CSS 4 · TanStack Query · React Router · React Hook Form + Zod · Phosphor Icons · Sonner
 
 ## Decisões técnicas que valem a conversa
 
@@ -72,17 +76,34 @@ Java 21 · Spring Boot 3.5 · Maven · PostgreSQL 17 · Spring Data JPA / Hibern
 - Probes de liveness/readiness, métricas próprias (`reconciliation_discrepancies_total{type}`, `reconciliation_run_duration_seconds`, `outbox_pending`) e logs JSON com `X-Request-Id` em cada linha.
 - Imagem Docker multi-stage, em camadas, rodando sem root.
 
+## Painel web
+
+O painel em `frontend/` consome a mesma API REST, com login JWT e as mesmas regras de acesso: o administrador escolhe a loja; o usuário de uma loja cai direto nela e não consegue abrir outra.
+
+| Divergência em detalhe | Importação de CSV |
+|---|---|
+| ![Detalhe de divergência](docs/screenshots/divergencia-detalhe.png) | ![Repasses](docs/screenshots/repasses.png) |
+
+- **Visão geral:** pedidos do mês por status, quanto a loja tem **a recuperar** do adquirente e um gráfico de impacto por tipo em volta do zero (perda à esquerda, dinheiro sobrando à direita).
+- **Divergências:** filtros por status e tipo guardados na URL, detalhe lateral e registro da resolução.
+- **Repasses:** upload do CSV com a `Idempotency-Key` visível e botão para reenviar com a mesma chave (a API devolve o resultado original sem reprocessar), além das linhas rejeitadas com o motivo.
+- **Alertas:** atualizados a cada 5 s, chegam pelo consumidor Kafka segundos depois de cada conciliação.
+- Tema claro e escuro, layout responsivo e páginas carregadas sob demanda (code splitting por rota).
+
+Em produção o nginx serve os arquivos estáticos e repassa `/api` para a API na mesma origem, então não há CORS. Ele também envia um `X-Request-Id`, que aparece em todas as linhas de log da requisição na API.
+
 ## Como rodar
 
 Pré-requisito: Docker. Para desenvolver também: JDK 21.
 
-**Tudo em container (API + Postgres + Kafka):**
+**Tudo em container (painel + API + Postgres + Kafka):**
 
 ```bash
 docker compose up --build
 ./scripts/demo.sh    # fluxo completo: loja -> pedidos -> CSV -> conciliação -> alertas (precisa de curl e jq)
 ```
 
+- Painel: http://localhost:3000
 - Swagger UI: http://localhost:8080/swagger-ui.html (use `POST /api/auth/login` e cole o token em **Authorize**)
 - Admin local: `admin@local.dev` / `admin12345` (só no Compose e no perfil `dev`; em produção vem de `ADMIN_EMAIL`/`ADMIN_PASSWORD`)
 
@@ -90,7 +111,9 @@ docker compose up --build
 
 ```bash
 docker compose up -d postgres kafka
-./mvnw spring-boot:run        # sobe com o perfil dev
+./mvnw spring-boot:run        # API com o perfil dev, porta 8080
+
+cd frontend && npm install && npm run dev    # painel em http://localhost:5173, /api vai para a 8080 pelo proxy do Vite
 ```
 
 **Testes** (Docker precisa estar rodando):
@@ -111,6 +134,7 @@ docker compose up -d postgres kafka
 | `GET` `PUT` | `/api/stores/{id}` | loja dona / ADMIN (PUT só ADMIN) |
 | `POST` `GET` | `/api/stores/{id}/orders` | loja dona / ADMIN |
 | `POST` | `/api/stores/{id}/payout-imports` (multipart + `Idempotency-Key`) | loja dona / ADMIN |
+| `GET` | `/api/stores/{id}/payout-imports` | loja dona / ADMIN |
 | `GET` | `/api/stores/{id}/payouts` | loja dona / ADMIN |
 | `POST` `GET` | `/api/stores/{id}/reconciliation-runs` | loja dona / ADMIN |
 | `GET` | `/api/stores/{id}/discrepancies?type=&status=` | loja dona / ADMIN |
@@ -137,7 +161,7 @@ Formato do CSV de repasses: [`samples/payouts-2026-09.csv`](samples/payouts-2026
 
 ## CI/CD
 
-A cada push, o GitHub Actions roda `./mvnw verify` (unitários + Testcontainers com Postgres e Kafka reais) e guarda os relatórios. Na `main`, publica a imagem em `ghcr.io/samuelvno/payment-reconciliation-api` com as tags `latest` e o SHA do commit. Qualquer host com Docker roda a imagem passando as variáveis acima, com um Postgres e um Kafka gerenciados.
+A cada push, o GitHub Actions roda `./mvnw verify` (unitários + Testcontainers com Postgres e Kafka reais) e, em paralelo, lint, checagem de tipos e build do painel. Na `main`, publica as imagens `ghcr.io/samuelvno/payment-reconciliation-api` e `...-web` com as tags `latest` e o SHA do commit. Qualquer host com Docker roda a imagem passando as variáveis acima, com um Postgres e um Kafka gerenciados.
 
 ## Estrutura
 
@@ -151,6 +175,12 @@ src/main/java/io/github/samuelvno/paymentreconciliation
 ├── notification/     consumidor Kafka e alertas por loja
 └── shared/           erros (RFC 9457), segurança, outbox, config, filtros
 src/main/resources/db/migration   V1..V6 (Flyway)
+
+frontend/src
+├── pages/        uma tela por rota (visão geral, divergências, pedidos, repasses, execuções, alertas, lojas)
+├── components/   layout, marcadores de divergência, valores em R$, guards de rota, shadcn/ui
+├── hooks/api.ts  TanStack Query: uma hook por endpoint, invalidação por loja
+└── lib/          cliente HTTP (ProblemDetail -> ApiError), sessão JWT, formatação pt-BR
 ```
 
 ## Próximos passos

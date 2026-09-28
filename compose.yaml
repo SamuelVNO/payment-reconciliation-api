@@ -64,5 +64,13 @@ services:
     volumes:
       - ./payout-inbox:/app/payout-inbox
 
+  # Painel React servido pelo nginx em http://localhost:3000
+  web:
+    build: ./frontend
+    depends_on:
+      - app
+    ports:
+      - "3000:80"
+
 volumes:
   pgdata:
