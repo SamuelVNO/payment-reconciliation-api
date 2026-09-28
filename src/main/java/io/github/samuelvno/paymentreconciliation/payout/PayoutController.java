@@ -58,6 +58,14 @@ public class PayoutController {
         return ResponseEntity.created(location).body(outcome.result());
     }
 
+    @Operation(summary = "Histórico de importações")
+    @GetMapping("/payout-imports")
+    public Page<PayoutImportResponse> findImports(@PathVariable UUID storeId,
+                                                  @PageableDefault(size = 20, sort = "createdAt",
+                                                          direction = Sort.Direction.DESC) Pageable pageable) {
+        return importService.findImports(storeId, pageable);
+    }
+
     @Operation(summary = "Resultado de uma importação")
     @GetMapping("/payout-imports/{importId}")
     public PayoutImportResponse findImport(@PathVariable UUID storeId, @PathVariable UUID importId) {

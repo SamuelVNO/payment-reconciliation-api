@@ -88,6 +88,10 @@ public class PayoutImportService {
                 .orElseThrow(() -> new ResourceNotFoundException("Payout import", importId));
     }
 
+    public Page<PayoutImportResponse> findImports(UUID storeId, Pageable pageable) {
+        return importRepository.findByStoreId(storeId, pageable).map(PayoutImportResponse::from);
+    }
+
     public Page<PayoutResponse> findPayouts(UUID storeId, Pageable pageable) {
         return payoutRepository.findByStoreId(storeId, pageable).map(PayoutResponse::from);
     }

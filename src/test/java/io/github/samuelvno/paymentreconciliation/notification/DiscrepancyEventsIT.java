@@ -99,6 +99,10 @@ class DiscrepancyEventsIT {
 
         assertThat(outboxRepository.countByPublishedAtIsNull()).isZero();
         await().atMost(Duration.ofSeconds(20)).until(() -> alertRepository.countByStoreId(storeId) == 2);
+        // NumberFormat pt-BR separa "R$" do valor com espaço não separável (U+00A0), não com espaço comum
+        assertThat(alertRepository.findByStoreId(storeId, Pageable.unpaged()).getContent())
+                .extracting(StoreAlert::getMessage)
+                .contains("Taxa acima da contratada: pedido PED-1, diferença de R$\u00a00,81");
 
         // Reentrega do mesmo evento (o que acontece num retry do relay): nenhum alerta novo.
         StoreAlert alert = alertRepository.findByStoreId(storeId, Pageable.ofSize(1))

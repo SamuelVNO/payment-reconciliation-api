@@ -18,6 +18,7 @@ import io.github.samuelvno.paymentreconciliation.store.StoreRepository;
 
 import static io.github.samuelvno.paymentreconciliation.TestAuth.admin;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -64,5 +65,10 @@ class PayoutImportIT {
 
         assertThat(payoutRepository.findByStoreId(store.getId(), Pageable.unpaged())
                 .getTotalElements()).isEqualTo(2);
+
+        mockMvc.perform(get("/api/stores/{storeId}/payout-imports", store.getId()).with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].idempotencyKey").value("key-1"));
     }
 }
