@@ -12,7 +12,7 @@ import { RunButton } from "@/components/run-button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { useAlerts, useDiscrepancies, useReport, useRuns } from "@/hooks/api"
+import { useAlerts, useDiscrepancies, useOrders, useReport, useRuns } from "@/hooks/api"
 import { describeError } from "@/lib/api"
 import { DISCREPANCY_TYPES, impact } from "@/lib/discrepancy"
 import { alertDetail, count, dateTime, dayShort, duration, money } from "@/lib/format"
@@ -51,7 +51,8 @@ function Ledger({ report }: { report: ReconciliationReport }) {
   const total = RECONCILED + DIVERGENT + PENDING
   const pct = (n: number) => (total === 0 ? 0 : (n / total) * 100)
   const effects = report.discrepanciesByType.map((t) => impact(t.type, t.totalDifference))
-  const toRecover = -effects.filter((v) => v < 0).reduce((a, b) => a + b, 0)
+  // Subtrai em vez de negar a soma: -(0) vira -0, que o Intl formata como "-R$ 0,00".
+  const toRecover = effects.filter((v) => v < 0).reduce((a, b) => a - b, 0)
   const unexplained = effects.filter((v) => v > 0).reduce((a, b) => a + b, 0)
 
   return (
@@ -154,7 +155,12 @@ function Receipt({ run }: { run: ReconciliationRun }) {
 export function OverviewPage() {
   const { storeId = "" } = useParams()
   const options = useMemo(() => months(), [])
-  const [month, setMonth] = useState(options[0].value)
+  // Sem escolha do usuário, abre no mês do pedido mais recente (a lista vem por orderDate desc),
+  // para a tela não abrir zerada quando o mês corrente ainda não tem pedidos.
+  const latest = useOrders(storeId, { page: 0 })
+  const latestMonth = latest.data?.content[0]?.orderDate.slice(0, 7)
+  const [picked, setPicked] = useState<string>()
+  const month = picked ?? options.find((o) => o.value === latestMonth)?.value ?? options[0].value
   const period = options.find((o) => o.value === month) ?? options[0]
 
   const report = useReport(storeId, period.from, period.to)
@@ -170,7 +176,7 @@ export function OverviewPage() {
         description="Como os pedidos do período bateram com o que o adquirente repassou."
         actions={
           <>
-            <Select value={month} onValueChange={setMonth}>
+            <Select value={month} onValueChange={setPicked}>
               <SelectTrigger className="w-[190px]" aria-label="Período">
                 <SelectValue />
               </SelectTrigger>
