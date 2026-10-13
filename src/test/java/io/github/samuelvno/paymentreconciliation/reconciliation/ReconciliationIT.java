@@ -72,7 +72,7 @@ class ReconciliationIT {
 
     @BeforeEach
     void setUp() throws Exception {
-        String document = String.valueOf(System.nanoTime()).substring(0, 14);
+        String document = TestDocuments.uniqueCnpj();
         Store store = storeRepository.save(new Store("Loja IT", document, new BigDecimal("0.0299")));
         storeId = store.getId();
         order(store, "PED-1001", "150.00", "2026-09-20");

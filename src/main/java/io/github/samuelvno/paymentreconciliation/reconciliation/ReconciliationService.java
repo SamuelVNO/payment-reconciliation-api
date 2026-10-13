@@ -31,7 +31,6 @@ import io.github.samuelvno.paymentreconciliation.order.OrderStatusCount;
 import io.github.samuelvno.paymentreconciliation.order.ReconciliationStatus;
 import io.github.samuelvno.paymentreconciliation.payout.Payout;
 import io.github.samuelvno.paymentreconciliation.payout.PayoutRepository;
-import io.github.samuelvno.paymentreconciliation.shared.config.TimeConfig;
 import io.github.samuelvno.paymentreconciliation.shared.error.InvalidRequestException;
 import io.github.samuelvno.paymentreconciliation.shared.error.ResourceNotFoundException;
 import io.github.samuelvno.paymentreconciliation.shared.outbox.OutboxWriter;
@@ -232,10 +231,8 @@ public class ReconciliationService {
         for (OrderStatusCount count : orderRepository.countByStatus(storeId, from, to)) {
             ordersByStatus.put(count.status(), count.total());
         }
-        Instant start = from.atStartOfDay(TimeConfig.BUSINESS_ZONE).toInstant();
-        Instant end = to.plusDays(1).atStartOfDay(TimeConfig.BUSINESS_ZONE).toInstant();
         return new ReconciliationReport(from, to, ordersByStatus,
-                discrepancyRepository.summarizeByType(storeId, start, end),
+                discrepancyRepository.summarizeByType(storeId, from, to),
                 discrepancyRepository.countByStoreIdAndStatus(storeId, DiscrepancyStatus.OPEN));
     }
 }
