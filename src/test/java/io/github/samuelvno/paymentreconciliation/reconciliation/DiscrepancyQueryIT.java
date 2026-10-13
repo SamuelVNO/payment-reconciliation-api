@@ -23,6 +23,7 @@ import io.github.samuelvno.paymentreconciliation.order.OrderRepository;
 import io.github.samuelvno.paymentreconciliation.payout.PayoutImportService;
 import io.github.samuelvno.paymentreconciliation.store.Store;
 import io.github.samuelvno.paymentreconciliation.store.StoreRepository;
+import io.github.samuelvno.paymentreconciliation.store.TestDocuments;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -64,7 +65,7 @@ class DiscrepancyQueryIT {
 
     @BeforeEach
     void setUp() {
-        Store store = storeRepository.save(new Store("Loja N+1", String.valueOf(System.nanoTime()).substring(0, 14),
+        Store store = storeRepository.save(new Store("Loja N+1", TestDocuments.uniqueCnpj(),
                 new BigDecimal("0.0299")));
         storeId = store.getId();
         StringBuilder csv = new StringBuilder("payout_id,order_id,gross_amount,fee_amount,net_amount,paid_at\n");

@@ -33,6 +33,7 @@ import io.github.samuelvno.paymentreconciliation.shared.outbox.OutboxRelay;
 import io.github.samuelvno.paymentreconciliation.shared.outbox.OutboxRepository;
 import io.github.samuelvno.paymentreconciliation.store.Store;
 import io.github.samuelvno.paymentreconciliation.store.StoreRepository;
+import io.github.samuelvno.paymentreconciliation.store.TestDocuments;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -75,7 +76,7 @@ class DiscrepancyEventsIT {
 
     @BeforeEach
     void setUp() {
-        Store store = storeRepository.save(new Store("Loja Kafka", String.valueOf(System.nanoTime()).substring(0, 14),
+        Store store = storeRepository.save(new Store("Loja Kafka", TestDocuments.uniqueCnpj(),
                 new BigDecimal("0.0299")));
         storeId = store.getId();
         LocalDate orderDate = LocalDate.now().minusDays(10);

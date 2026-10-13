@@ -30,6 +30,7 @@ import io.github.samuelvno.paymentreconciliation.order.OrderRepository;
 import io.github.samuelvno.paymentreconciliation.payout.PayoutImportService;
 import io.github.samuelvno.paymentreconciliation.store.Store;
 import io.github.samuelvno.paymentreconciliation.store.StoreRepository;
+import io.github.samuelvno.paymentreconciliation.store.TestDocuments;
 
 import static io.github.samuelvno.paymentreconciliation.TestAuth.storeUser;
 import static org.hamcrest.Matchers.containsInAnyOrder;
